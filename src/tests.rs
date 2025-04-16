@@ -6,6 +6,7 @@ use crate::linked_list::EMPTY_FLAG;
 use core::alloc::GlobalAlloc;
 use core::alloc::Layout;
 use core::mem::size_of;
+use core::ptr::null_mut;
 
 /// 该函数用于test_linked_list和test_linked_list_concurrent
 #[no_mangle]
@@ -47,41 +48,50 @@ fn test_linked_list() {
 #[test]
 fn test_linked_list_concurrent() {
     use std::sync::Arc;
-    use std::sync::Barrier;
     use std::thread;
 
-    let mut handles = Vec::with_capacity(6);
-    let barrier1 = Arc::new(Barrier::new(6));
-    let barrier2 = Arc::new(Barrier::new(6));
-    let mut values: [usize; 6] = [0; 6];
+    const NUM_THREADS: usize = 20;
+    // 每个线程执行 NUM_DATA_PER_THREAD 次 push 、 NUM_DELETE_PER_THREAD 次 delete 、 NUM_DATA_PER_THREAD - NUM_DELETE_PER_THREAD 次 pop 。
+    const NUM_DATA_PER_THREAD: usize = 50;
+    const NUM_DELETE_PER_THREAD: usize = 25;
+
+    let mut handles = Vec::with_capacity(NUM_THREADS);
+    let values: Arc<[usize; NUM_THREADS * NUM_DATA_PER_THREAD]> = Arc::new([0; NUM_THREADS * NUM_DATA_PER_THREAD]);
+    // println!("&value = {:?}", values.as_ptr_range());
     let list = Arc::new(linked_list::LinkedList::new());
 
-    for i in 0..6 {
-        let b1 = barrier1.clone();
-        let b2 = barrier2.clone();
+    for i in 0..NUM_THREADS {
         let l = list.clone();
+        let v = values.clone();
         handles.push(thread::spawn(move || {
-            // 读写分开进行的测试，更好从输出的值中判断是否行为正确
-            let value_ptr = ((&values as *const [usize] as *const () as usize) + i * size_of::<usize>()) as *mut ();
-            println!("value{i} = {:#p}", value_ptr);
-            unsafe { l.push(value_ptr); }
-            println!("*value{i} = {:#x} after push", unsafe {*(value_ptr as *mut usize)});
-            b1.wait();
-            let poped = l.pop().unwrap();
-            println!("thread{i} get addr {:#p} after pop", poped);
+            let mut value_ptr: [*mut (); NUM_DATA_PER_THREAD] = [null_mut(); NUM_DATA_PER_THREAD];
+            // println!("&value = {:?}", v.as_ptr_range());
+            for j in 0 .. NUM_DATA_PER_THREAD {
+                value_ptr[j] = ((v.as_ptr() as *const () as usize) + i * NUM_DATA_PER_THREAD * size_of::<usize>() + j * size_of::<usize>()) as *mut ();
+                // println!("&value[{i}][{j}] = {:p}", value_ptr[j]);
+            }
 
-            // 读写同时进行的测试，验证其不会死锁
-            b2.wait();
-            unsafe { l.push(value_ptr); }
-            assert!(l.delete(value_ptr));
-            println!("thread{i} test complete!")
+            for j in 0 .. NUM_DATA_PER_THREAD {
+                unsafe { l.push(value_ptr[j]); }
+            }
 
+            for j in 0 .. NUM_DATA_PER_THREAD {
+                if j < NUM_DELETE_PER_THREAD {
+                    if !l.delete(value_ptr[j]) {
+                        l.pop(); // 如果删除失败，则额外pop一次
+                    }
+                }
+                else {
+                    l.pop();
+                }
+            }
         }));
     }
 
     for handle in handles {
         handle.join().unwrap();
     }
+    assert!(list.is_empty());
 }
 
 // static mut SPACE: [usize; 0x1000] = [0; 0x1000];
