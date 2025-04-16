@@ -4,18 +4,18 @@ use crate::get_data_base;
 
 /// 该类型代表一个链表节点。
 /// 其值可以看作一个可能带有标记的、地址无关的、原子的指针。
-pub type ListNode = MarkedPtr<PIPtr<AtomicPtr<()>>>;
+pub(crate) type ListNode = MarkedPtr<PIPtr<AtomicPtr<()>>>;
 
-pub(crate) const EMPTY_FLAG: *mut () = 0x74f as *mut ();
+pub(crate) const EMPTY_FLAG: *mut () = 0x74e as *mut ();
 pub(crate) const DELETE_MARK: usize = 0b1;
 
 #[repr(C)]
-struct MarkedPtr<T> (T);
+pub(crate) struct MarkedPtr<T> (T);
 
 #[repr(C)]
-struct PIPtr<T> (T);
+pub(crate) struct PIPtr<T> (T);
 
-pub trait LinkedPtr {
+pub(crate) trait LinkedPtr {
     /// 获取该节点的值，没有进行去标记和地址转换
     fn value(&self) -> *mut ();
     /// 获取该节点的值，且经过了某种将值变为有效的指针的转换。
@@ -111,7 +111,13 @@ where T: LinkedPtr {
     }
 
     fn ptr(&self) -> *mut () {
-        unsafe { (self.0.ptr() as usize + get_data_base()) as *mut () }
+        let ptr = self.0.ptr();
+        if ptr == EMPTY_FLAG {
+            ptr
+        }
+        else {
+            unsafe { (ptr as usize + get_data_base()) as *mut () }
+        }
     }
 
     fn from_value(value: *mut ()) -> Self {
@@ -119,7 +125,12 @@ where T: LinkedPtr {
     }
 
     fn from_ptr(ptr: *mut ()) -> Self {
-        Self(T::from_ptr(unsafe { (ptr as usize - get_data_base()) as *mut () }))
+        if ptr == EMPTY_FLAG {
+            Self(T::from_ptr(ptr))
+        }
+        else {
+            Self(T::from_ptr(unsafe { (ptr as usize - get_data_base()) as *mut () }))
+        }
     }
 
     fn from_its_ptr(its_ptr: *mut ()) -> &'static Self {
@@ -175,7 +186,7 @@ impl ListNode {
 
 /// 该类型代表指向链表节点的指针（且指针自身的位置不在链表上）。
 /// 其与有效指针的唯一区别是其可能带有标记。
-pub type NodePtr = MarkedPtr<*mut ()>;
+pub(crate) type NodePtr = MarkedPtr<*mut ()>;
 
 impl MarkedPtr<*mut ()> {
     /// 判断自身是否有标记
@@ -216,7 +227,7 @@ impl MarkedPtr<*mut ()> {
     }
 
     /// 获取指针指向的下一个节点的指针
-    /// 与LinkedPtr::next不同，该函数还包含将ListNode转化为NodePtr的过程。
+    /// 与ListNode::next不同，该函数还包含将ListNode转化为NodePtr的过程。
     pub fn next(&self) -> Self {
         self.pointed_node().marked_ptr()
     }
@@ -227,7 +238,12 @@ impl MarkedPtr<*mut ()> {
 
     /// 将指针转化为链表上存储的位置无关形式
     pub fn linked_value(&self) -> *mut () {
-        unsafe { (self.value() as usize - get_data_base()) as *mut () }
+        if self.unmark() == EMPTY_FLAG {
+            self.value()
+        }
+        else {
+            unsafe { (self.value() as usize - get_data_base()) as *mut () }
+        }
     }
 }
 
