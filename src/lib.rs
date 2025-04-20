@@ -10,6 +10,7 @@
 mod imp;
 mod linked_list;
 pub use imp::{Heap, LockedHeap, LockedHeapWithRescue};
+pub use linked_list::LinkedList;
 
 extern "C" {
     fn get_data_base() -> usize;
