@@ -10,10 +10,10 @@ pub(crate) const EMPTY_FLAG: *mut () = 0x74e as *mut ();
 pub(crate) const DELETE_MARK: usize = 0b1;
 
 #[repr(C)]
-pub(crate) struct MarkedPtr<T> (T);
+pub(crate) struct MarkedPtr<T>(T);
 
 #[repr(C)]
-pub(crate) struct PIPtr<T> (T);
+pub(crate) struct PIPtr<T>(T);
 
 pub(crate) trait LinkedPtr {
     /// 获取该节点的值，没有进行去标记和地址转换
@@ -35,7 +35,9 @@ pub(crate) trait LinkedPtr {
 
     /// 根据默认值（EMPTY_FLAG）新建节点
     fn default() -> Self
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         Self::from_value(EMPTY_FLAG)
     }
     /// 判断两个节点的值是否相等
@@ -49,7 +51,9 @@ pub(crate) trait LinkedPtr {
 }
 
 impl<T> LinkedPtr for MarkedPtr<T>
-where T: LinkedPtr {
+where
+    T: LinkedPtr,
+{
     fn value(&self) -> *mut () {
         self.0.value()
     }
@@ -68,7 +72,7 @@ where T: LinkedPtr {
 
     fn from_its_ptr(its_ptr: *mut ()) -> &'static Self {
         T::from_its_ptr(its_ptr);
-        unsafe { &*(its_ptr as *mut Self) } 
+        unsafe { &*(its_ptr as *mut Self) }
     }
 
     fn set(&self, value: *mut ()) {
@@ -81,7 +85,9 @@ where T: LinkedPtr {
 }
 
 impl<T> MarkedPtr<T>
-where T: LinkedPtr {
+where
+    T: LinkedPtr,
+{
     /// 判断自身是否有标记
     pub fn is_marked(&self) -> bool {
         (self.0.value() as usize) & DELETE_MARK != 0
@@ -105,7 +111,9 @@ where T: LinkedPtr {
 }
 
 impl<T> LinkedPtr for PIPtr<T>
-where T: LinkedPtr {
+where
+    T: LinkedPtr,
+{
     fn value(&self) -> *mut () {
         self.0.value()
     }
@@ -114,8 +122,7 @@ where T: LinkedPtr {
         let ptr = self.0.ptr();
         if ptr == EMPTY_FLAG {
             ptr
-        }
-        else {
+        } else {
             unsafe { (ptr as usize + get_data_base()) as *mut () }
         }
     }
@@ -127,15 +134,16 @@ where T: LinkedPtr {
     fn from_ptr(ptr: *mut ()) -> Self {
         if ptr == EMPTY_FLAG {
             Self(T::from_ptr(ptr))
-        }
-        else {
-            Self(T::from_ptr(unsafe { (ptr as usize - get_data_base()) as *mut () }))
+        } else {
+            Self(T::from_ptr(unsafe {
+                (ptr as usize - get_data_base()) as *mut ()
+            }))
         }
     }
 
     fn from_its_ptr(its_ptr: *mut ()) -> &'static Self {
         T::from_its_ptr(its_ptr);
-        unsafe { &*(its_ptr as *mut Self) } 
+        unsafe { &*(its_ptr as *mut Self) }
     }
 
     fn set(&self, value: *mut ()) {
@@ -165,7 +173,7 @@ impl LinkedPtr for AtomicPtr<()> {
     }
 
     fn from_its_ptr(its_ptr: *mut ()) -> &'static Self {
-        unsafe { Self::from_ptr(its_ptr as *mut *mut()) }
+        unsafe { Self::from_ptr(its_ptr as *mut *mut ()) }
     }
 
     fn set(&self, value: *mut ()) {
@@ -218,7 +226,9 @@ impl MarkedPtr<*mut ()> {
 
     /// 根据默认值（EMPTY_FLAG）新建指针
     pub fn default() -> Self
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         Self::from_value(EMPTY_FLAG)
     }
     /// 判断两个指针的值是否相等
@@ -240,8 +250,7 @@ impl MarkedPtr<*mut ()> {
     pub fn linked_value(&self) -> *mut () {
         if self.unmark() == EMPTY_FLAG {
             self.value()
-        }
-        else {
+        } else {
             unsafe { (self.value() as usize - get_data_base()) as *mut () }
         }
     }
@@ -253,4 +262,4 @@ impl Clone for NodePtr {
     }
 }
 
-impl Copy for NodePtr { }
+impl Copy for NodePtr {}

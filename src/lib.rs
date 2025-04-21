@@ -7,9 +7,9 @@
 //! 因此，需要保证在中断处理例程中不会使用堆分配器，直接使用预先分配的即可
 #![cfg_attr(not(test), no_std)]
 
-// mod imp;
+mod imp;
 mod linked_list;
-pub use imp::{Heap, LockedHeap, LockedHeapWithRescue};
+pub use imp::LockFreeHeap;
 pub use linked_list::LinkedList;
 
 extern "C" {
@@ -17,4 +17,7 @@ extern "C" {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    include!("./tests/list_tests.rs");
+    include!("./tests/heap_tests.rs");
+}

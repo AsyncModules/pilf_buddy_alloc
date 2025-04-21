@@ -2,6 +2,7 @@
 pub(crate) use node_ptr::EMPTY_FLAG;
 use node_ptr::{LinkedPtr, ListNode, NodePtr};
 
+#[allow(unused)]
 mod node_ptr;
 
 /// An intrusive linked list
@@ -25,6 +26,8 @@ unsafe impl Send for LinkedList {}
 unsafe impl Sync for LinkedList {}
 
 impl LinkedList {
+    pub(crate) const EMPTY_LIST: Self = Self::new();
+
     /// Create a new LinkedList
     pub const fn new() -> LinkedList {
         LinkedList {
