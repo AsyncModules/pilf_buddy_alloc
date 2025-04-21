@@ -1,6 +1,8 @@
+use pi_pointer::NULL_PTR;
+
 use crate::linked_list;
 use crate::linked_list::LinkedList;
-use crate::linked_list::EMPTY_FLAG;
+// use crate::linked_list::EMPTY_FLAG;
 // use crate::Heap;
 // use crate::LockedHeapWithRescue;
 use core::alloc::GlobalAlloc;
@@ -34,7 +36,7 @@ fn test_linked_list() {
     assert_eq!(value4 + get_data_base(), &value3 as *const usize as usize);
     assert_eq!(value3 + get_data_base(), &value2 as *const usize as usize);
     assert_eq!(value2 + get_data_base(), &value1 as *const usize as usize);
-    assert_eq!(value1, EMPTY_FLAG as usize);
+    assert_eq!(value1, NULL_PTR as usize);
 
     // Test delete
     assert_eq!(list.delete(&mut value2 as *mut usize as *mut ()), true);
@@ -59,37 +61,45 @@ fn test_linked_list_concurrent() {
     assert!(NUM_PRODUCERS == NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS);
 
     let mut handles = Vec::with_capacity(NUM_PRODUCERS + NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS);
-    let values: Arc<[usize; NUM_PRODUCERS * NUM_DATA_PER_THREAD]> = Arc::new([0; NUM_PRODUCERS * NUM_DATA_PER_THREAD]);
+    let values: Arc<[usize; NUM_PRODUCERS * NUM_DATA_PER_THREAD]> =
+        Arc::new([0; NUM_PRODUCERS * NUM_DATA_PER_THREAD]);
     // 用于记录values的每个位置被从链表中取出了几次
-    let pop_nums: Arc<[AtomicUsize; NUM_PRODUCERS * NUM_DATA_PER_THREAD]> = Arc::new([const { AtomicUsize::new(0) }; NUM_PRODUCERS * NUM_DATA_PER_THREAD]);
+    let pop_nums: Arc<[AtomicUsize; NUM_PRODUCERS * NUM_DATA_PER_THREAD]> =
+        Arc::new([const { AtomicUsize::new(0) }; NUM_PRODUCERS * NUM_DATA_PER_THREAD]);
     // println!("&value = {:?}", values.as_ptr_range());
     let list = Arc::new(linked_list::LinkedList::new());
 
-    for i in 0 .. NUM_PRODUCERS {
+    for i in 0..NUM_PRODUCERS {
         let l = list.clone();
         let v = values.clone();
         handles.push(thread::spawn(move || {
             let mut value_ptr: [*mut (); NUM_DATA_PER_THREAD] = [null_mut(); NUM_DATA_PER_THREAD];
             // println!("&value = {:?}", v.as_ptr_range());
-            for j in 0 .. NUM_DATA_PER_THREAD {
-                value_ptr[j] = ((v.as_ptr() as *const () as usize) + i * NUM_DATA_PER_THREAD * size_of::<usize>() + j * size_of::<usize>()) as *mut ();
+            for j in 0..NUM_DATA_PER_THREAD {
+                value_ptr[j] = ((v.as_ptr() as *const () as usize)
+                    + i * NUM_DATA_PER_THREAD * size_of::<usize>()
+                    + j * size_of::<usize>()) as *mut ();
                 // println!("&value[{i}][{j}] = {:p}", value_ptr[j]);
             }
 
-            for j in 0 .. NUM_DATA_PER_THREAD {
-                unsafe { l.push(value_ptr[j]); }
+            for j in 0..NUM_DATA_PER_THREAD {
+                unsafe {
+                    l.push(value_ptr[j]);
+                }
             }
         }));
     }
 
-    for i in 0 .. NUM_DELETE_CONSUMERS {
+    for i in 0..NUM_DELETE_CONSUMERS {
         let l = list.clone();
         let v = values.clone();
         let p = pop_nums.clone();
         handles.push(thread::spawn(move || {
             let mut value_ptr: [*mut (); NUM_DATA_PER_THREAD] = [null_mut(); NUM_DATA_PER_THREAD];
-            for j in 0 .. NUM_DATA_PER_THREAD {
-                value_ptr[j] = ((v.as_ptr() as *const () as usize) + i * NUM_DATA_PER_THREAD * size_of::<usize>() + j * size_of::<usize>()) as *mut ();
+            for j in 0..NUM_DATA_PER_THREAD {
+                value_ptr[j] = ((v.as_ptr() as *const () as usize)
+                    + i * NUM_DATA_PER_THREAD * size_of::<usize>()
+                    + j * size_of::<usize>()) as *mut ();
             }
 
             let mut j = 0; // 删除计数
@@ -98,11 +108,11 @@ fn test_linked_list_concurrent() {
                     // 删除指定位置成功
                     p[i * NUM_DATA_PER_THREAD + j].fetch_add(1, Ordering::AcqRel);
                     j += 1; // 只有删除成功才会增加删除计数
-                }
-                else {
+                } else {
                     if let Some(ptr) = l.pop() {
                         // 删除指定位置失败，因此改为pop一个元素，以确保每个消费者删除的元素数量恒定
-                        let offset = (ptr as usize - v.as_ptr() as *const () as usize) / size_of::<usize>();
+                        let offset =
+                            (ptr as usize - v.as_ptr() as *const () as usize) / size_of::<usize>();
                         p[offset].fetch_add(1, Ordering::AcqRel);
                         j += 1; // 只有删除成功才会增加删除计数
                     }
@@ -111,7 +121,7 @@ fn test_linked_list_concurrent() {
         }));
     }
 
-    for i in NUM_DELETE_CONSUMERS .. NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS {
+    for i in NUM_DELETE_CONSUMERS..NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS {
         let l = list.clone();
         let v = values.clone();
         let p = pop_nums.clone();
@@ -119,7 +129,8 @@ fn test_linked_list_concurrent() {
             let mut j = 0; // 删除计数
             while j < NUM_DATA_PER_THREAD {
                 if let Some(ptr) = l.pop() {
-                    let offset = (ptr as usize - v.as_ptr() as *const () as usize) / size_of::<usize>();
+                    let offset =
+                        (ptr as usize - v.as_ptr() as *const () as usize) / size_of::<usize>();
                     p[offset].fetch_add(1, Ordering::AcqRel);
                     j += 1; // 只有删除成功才会增加删除计数
                 }
@@ -132,7 +143,7 @@ fn test_linked_list_concurrent() {
     }
 
     assert!(list.is_empty()); // 验证列表为空
-    for i in 0 .. NUM_PRODUCERS * NUM_DATA_PER_THREAD {
+    for i in 0..NUM_PRODUCERS * NUM_DATA_PER_THREAD {
         assert!(pop_nums[i].load(Ordering::Acquire) == 1); // 验证所有元素恰好被取出一次。
     }
 }

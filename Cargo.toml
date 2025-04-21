@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 spin = "0.10"
+pi_pointer = { path = "../pi_pointer" }
+crate_interface = "0.1"
