@@ -3,10 +3,14 @@ use crate::get_data_base;
 use core::marker::PhantomData;
 use core::{fmt, ptr};
 // pub(crate) use node_ptr::EMPTY_FLAG;
-use node_ptr::{ListNode, NodePtr};
+use node_ptr::{ListNode, MarkedPtr, NodePtr};
+use pi_pointer::{PIPtr, WrappedPtr};
 
 #[allow(unused)]
 mod node_ptr;
+
+/// 用于测试
+pub(crate) use node_ptr::DELETE_MARK;
 
 /// An intrusive linked list
 ///
@@ -69,7 +73,8 @@ impl LinkedList {
     pub fn pop(&self) -> Option<*mut ()> {
         let mut left_node = NodePtr::null();
         let mut right_node = NodePtr::null();
-        let mut right_node_next = NodePtr::null();
+        let mut right_node_value: MarkedPtr<PIPtr> = MarkedPtr::null();
+
         loop {
             // 查找与逻辑删除
             loop {
@@ -77,18 +82,17 @@ impl LinkedList {
                 if right_node.is_null() {
                     return None;
                 }
-                right_node_next = right_node.next().unwrap();
-                if !right_node_next.is_marked() {
+                right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
+                if !right_node_value.is_marked() {
                     // 此处实际判断的是right_node节点是否被标记
                     if right_node
                         .pointed_node()
                         .unwrap()
-                        .compare_exchange(
-                            right_node_next.linked_value(),
-                            NodePtr::from_value(right_node_next.mark()).linked_value(),
-                        )
+                        .compare_exchange(right_node_value.value(), right_node_value.mark())
                         .is_ok()
                     {
+                        // 标记节点，代表该节点已被该线程所有。
+                        // 之后只需将其从链表上删除，或者等待其被删除即可。
                         break;
                     }
                 }
@@ -97,7 +101,7 @@ impl LinkedList {
             if left_node
                 .pointed_node()
                 .unwrap()
-                .compare_exchange(right_node.linked_value(), right_node_next.linked_value())
+                .compare_exchange(right_node.linked_value(), right_node_value.value())
                 .is_err()
             {
                 let (_, _) = self.search_with_ptr(right_node.value());
@@ -117,7 +121,7 @@ impl LinkedList {
     pub fn delete(&self, item: *mut ()) -> bool {
         let mut left_node = NodePtr::null();
         let mut right_node = NodePtr::null();
-        let mut right_node_next = NodePtr::null();
+        let mut right_node_value: MarkedPtr<PIPtr> = MarkedPtr::null();
 
         // 查找与逻辑删除
         loop {
@@ -125,18 +129,17 @@ impl LinkedList {
             if right_node.is_null() {
                 return false;
             }
-            right_node_next = right_node.next().unwrap();
-            if !right_node_next.is_marked() {
+            right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
+            if !right_node_value.is_marked() {
                 // 此处实际判断的是right_node节点是否被标记
                 if right_node
                     .pointed_node()
                     .unwrap()
-                    .compare_exchange(
-                        right_node_next.linked_value(),
-                        NodePtr::from_value(right_node_next.mark()).linked_value(),
-                    )
+                    .compare_exchange(right_node_value.value(), right_node_value.mark())
                     .is_ok()
                 {
+                    // 标记节点，代表该节点已被该线程所有。
+                    // 之后只需将其从链表上删除，或者等待其被删除即可。
                     break;
                 }
             }
@@ -145,11 +148,12 @@ impl LinkedList {
         if left_node
             .pointed_node()
             .unwrap()
-            .compare_exchange(right_node.linked_value(), right_node_next.linked_value())
+            .compare_exchange(right_node.linked_value(), right_node_value.value())
             .is_err()
         {
             let (_, _) = self.search_with_ptr(right_node.value());
         }
+        assert!(!right_node.is_marked());
         return true;
     }
 }
@@ -191,7 +195,7 @@ impl LinkedList {
                     if !right_node.is_null() && right_node.pointed_node().unwrap().is_marked() {
                         break;
                     } else {
-                        return (left_node, right_node);
+                        return (left_node, right_node); // 这里没有检查left_node指向的节点是否被标记？
                     }
                 }
 

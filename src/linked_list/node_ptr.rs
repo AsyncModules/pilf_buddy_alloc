@@ -15,7 +15,7 @@ where
     }
 
     fn ptr(&self) -> *mut () {
-        ((self.0.value() as usize) & !DELETE_MARK) as *mut ()
+        T::from_value(self.unmark()).ptr()
     }
 
     fn from_value(value: *mut ()) -> Self {
@@ -57,7 +57,8 @@ where
     /// 获取该节点的值，且经过了地址变换。
     /// 返回值与有效指针的唯一区别是返回值可能带有标记。
     pub fn marked_ptr(&self) -> MarkedPtr<*mut ()> {
-        MarkedPtr(self.0.ptr())
+        let mark = (self.0.value() as usize) & DELETE_MARK;
+        MarkedPtr(((self.ptr() as usize) | mark) as *mut ())
     }
 }
 
@@ -70,16 +71,16 @@ impl ListNode {
     /// 该函数中不需要地址转换，因为其不涉及将指针存储入节点。
     /// SAFETY: its_ptr需要指向有效的ListNode
     pub(crate) unsafe fn from_its_ptr(its_ptr: *mut ()) -> &'static Self {
-        AtomicPtr::from_ptr(its_ptr as *mut *mut ());
+        // AtomicPtr::from_ptr(its_ptr as *mut *mut ());
         &*(its_ptr as *mut Self)
     }
 
     pub(crate) fn next(&'static self) -> Option<&'static Self> {
-        let ptr = self.0.load_ptr();
-        if ptr as usize == NULL_PTR {
+        let value = self.0.load();
+        if value.is_null() {
             None
         } else {
-            unsafe { Some(Self::from_its_ptr(ptr)) }
+            unsafe { Some(Self::from_its_ptr(value.ptr())) }
         }
     }
 }
@@ -92,6 +93,10 @@ impl ListNode {
 
     pub(crate) fn load_ptr(&self) -> *mut () {
         self.0.load_ptr()
+    }
+
+    pub(crate) fn load(&self) -> MarkedPtr<PIPtr> {
+        self.0.load()
     }
 
     pub(crate) fn from_value(value: *mut ()) -> Self {
@@ -154,11 +159,10 @@ impl NodePtr {
     }
 
     pub(crate) fn pointed_node(&self) -> Option<&'static ListNode> {
-        let ptr = self.0.ptr();
-        if ptr as usize == NULL_PTR {
+        if self.is_null() {
             None
         } else {
-            unsafe { Some(ListNode::from_its_ptr(ptr)) }
+            unsafe { Some(ListNode::from_its_ptr(self.ptr())) }
         }
     }
 
