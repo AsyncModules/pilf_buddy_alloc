@@ -7,6 +7,8 @@
 //! 因此，需要保证在中断处理例程中不会使用堆分配器，直接使用预先分配的即可
 #![cfg_attr(not(test), no_std)]
 
+use pi_pointer::GetDataBase;
+
 mod imp;
 mod linked_list;
 pub use imp::LockFreeHeap;
@@ -20,4 +22,13 @@ extern "C" {
 mod tests {
     include!("./tests/list_tests.rs");
     include!("./tests/heap_tests.rs");
+}
+
+struct GetDataBaseImpl;
+
+#[crate_interface::impl_interface]
+impl GetDataBase for GetDataBaseImpl {
+    fn get_data_base() -> usize {
+        unsafe { get_data_base() }
+    }
 }

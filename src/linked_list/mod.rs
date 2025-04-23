@@ -1,6 +1,9 @@
 /// 位置无关的无锁侵入式链表
-pub(crate) use node_ptr::EMPTY_FLAG;
-use node_ptr::{LinkedPtr, ListNode, NodePtr};
+use crate::get_data_base;
+use core::marker::PhantomData;
+use core::{fmt, ptr};
+// pub(crate) use node_ptr::EMPTY_FLAG;
+use node_ptr::{ListNode, NodePtr};
 
 #[allow(unused)]
 mod node_ptr;
@@ -31,14 +34,14 @@ impl LinkedList {
     /// Create a new LinkedList
     pub const fn new() -> LinkedList {
         LinkedList {
-            head: ListNode::const_default(),
+            head: ListNode::null(),
         }
     }
 
     /// Return `true` if the list is empty
     pub fn is_empty(&self) -> bool {
         let (_, right_node) = self.get_headptr_head();
-        return right_node.value() == EMPTY_FLAG;
+        return right_node.is_null();
     }
 
     /// Push `item` to the front of the list
@@ -47,9 +50,13 @@ impl LinkedList {
         loop {
             let (left_node, right_node) = self.get_headptr_head();
             let new_node = NodePtr::from_value(item);
-            new_node.pointed_node().set(right_node.linked_value());
+            new_node
+                .pointed_node()
+                .unwrap()
+                .store(right_node.linked_value());
             if left_node
                 .pointed_node()
+                .unwrap()
                 .compare_exchange(right_node.linked_value(), new_node.linked_value())
                 .is_ok()
             {
@@ -60,21 +67,22 @@ impl LinkedList {
 
     /// Try to remove the first item in the list
     pub fn pop(&self) -> Option<*mut ()> {
-        let mut left_node;
-        let mut right_node;
-        let mut right_node_next;
+        let mut left_node = NodePtr::null();
+        let mut right_node = NodePtr::null();
+        let mut right_node_next = NodePtr::null();
         loop {
             // 查找与逻辑删除
             loop {
                 (left_node, right_node) = self.get_headptr_head();
-                if right_node.value() == EMPTY_FLAG {
+                if right_node.is_null() {
                     return None;
                 }
-                right_node_next = right_node.next();
+                right_node_next = right_node.next().unwrap();
                 if !right_node_next.is_marked() {
                     // 此处实际判断的是right_node节点是否被标记
                     if right_node
                         .pointed_node()
+                        .unwrap()
                         .compare_exchange(
                             right_node_next.linked_value(),
                             NodePtr::from_value(right_node_next.mark()).linked_value(),
@@ -88,6 +96,7 @@ impl LinkedList {
             // 物理删除
             if left_node
                 .pointed_node()
+                .unwrap()
                 .compare_exchange(right_node.linked_value(), right_node_next.linked_value())
                 .is_err()
             {
@@ -106,21 +115,22 @@ impl LinkedList {
     /// 返回值true代表链表中有所找项并成功删除；false代表没有所找项。
     /// 不会出现链表中有所找项但删除失败的情况。
     pub fn delete(&self, item: *mut ()) -> bool {
-        let mut left_node;
-        let mut right_node;
-        let mut right_node_next;
+        let mut left_node = NodePtr::null();
+        let mut right_node = NodePtr::null();
+        let mut right_node_next = NodePtr::null();
 
         // 查找与逻辑删除
         loop {
             (left_node, right_node) = self.search_with_ptr(item);
-            if right_node.value() == EMPTY_FLAG {
+            if right_node.is_null() {
                 return false;
             }
-            right_node_next = right_node.next();
+            right_node_next = right_node.next().unwrap();
             if !right_node_next.is_marked() {
                 // 此处实际判断的是right_node节点是否被标记
                 if right_node
                     .pointed_node()
+                    .unwrap()
                     .compare_exchange(
                         right_node_next.linked_value(),
                         NodePtr::from_value(right_node_next.mark()).linked_value(),
@@ -134,6 +144,7 @@ impl LinkedList {
         // 物理删除
         if left_node
             .pointed_node()
+            .unwrap()
             .compare_exchange(right_node.linked_value(), right_node_next.linked_value())
             .is_err()
         {
@@ -147,9 +158,9 @@ impl LinkedList {
 impl LinkedList {
     fn search_with_ptr(&self, item: *mut ()) -> (NodePtr, NodePtr) {
         // 两个返回值分别为left_node和right_node
-        let mut left_node: NodePtr = NodePtr::default();
-        let mut left_node_next: NodePtr = NodePtr::default();
-        let mut right_node: NodePtr;
+        let mut left_node: NodePtr = NodePtr::null();
+        let mut left_node_next: NodePtr = NodePtr::null();
+        let mut right_node: NodePtr = NodePtr::null();
         loop {
             loop {
                 let mut t: NodePtr =
@@ -163,10 +174,10 @@ impl LinkedList {
                         left_node_next = t_next;
                     }
                     t = NodePtr::from_value(t_next.unmark());
-                    if t.value() == EMPTY_FLAG {
+                    if t.is_null() {
                         break;
                     }
-                    t_next = t.next();
+                    t_next = t.next().unwrap();
                     // rust没有do-while，因此这样退出循环
                     if !(t_next.is_marked() || (t.ptr() != item)) {
                         // if的第二个条件，将原论文的按值查找改为了按指针查找
@@ -177,7 +188,7 @@ impl LinkedList {
 
                 /* 2: Check nodes are adjacent*/
                 if left_node_next.value() == right_node.value() {
-                    if (right_node.value() != EMPTY_FLAG) && right_node.pointed_node().is_marked() {
+                    if !right_node.is_null() && right_node.pointed_node().unwrap().is_marked() {
                         break;
                     } else {
                         return (left_node, right_node);
@@ -185,12 +196,13 @@ impl LinkedList {
                 }
 
                 /* 3: Remove one or more marked nodes */
-                if (left_node
+                if left_node
                     .pointed_node()
-                    .compare_exchange(left_node_next.linked_value(), right_node.linked_value()))
-                .is_ok()
+                    .unwrap()
+                    .compare_exchange(left_node_next.linked_value(), right_node.linked_value())
+                    .is_ok()
                 {
-                    if (right_node.value() != EMPTY_FLAG) && right_node.pointed_node().is_marked() {
+                    if !right_node.is_null() && right_node.pointed_node().unwrap().is_marked() {
                         break;
                     } else {
                         return (left_node, right_node);
@@ -202,9 +214,9 @@ impl LinkedList {
 
     fn get_headptr_head(&self) -> (NodePtr, NodePtr) {
         // 两个返回值分别为&head和head
-        let mut left_node: NodePtr = NodePtr::default();
-        let mut left_node_next: NodePtr = NodePtr::default();
-        let mut right_node: NodePtr;
+        let mut left_node: NodePtr = NodePtr::null();
+        let mut left_node_next: NodePtr = NodePtr::null();
+        let mut right_node: NodePtr = NodePtr::null();
         loop {
             loop {
                 let mut t: NodePtr =
@@ -218,13 +230,12 @@ impl LinkedList {
                         left_node_next = t_next;
                     }
                     t = NodePtr::from_value(t_next.unmark());
-                    if t.value() == EMPTY_FLAG {
+                    if t.is_null() {
                         break;
                     }
-                    t_next = t.next();
+                    t_next = t.next().unwrap();
                     // rust没有do-while，因此这样退出循环
                     if !t_next.is_marked() {
-                        // if的第二个条件，将原论文的按值查找改为了按指针查找
                         break;
                     }
                 }
@@ -232,7 +243,7 @@ impl LinkedList {
 
                 /* 2: Check nodes are adjacent*/
                 if left_node_next.value() == right_node.value() {
-                    if (right_node.value() != EMPTY_FLAG) && right_node.pointed_node().is_marked() {
+                    if !right_node.is_null() && right_node.pointed_node().unwrap().is_marked() {
                         break;
                     } else {
                         return (left_node, right_node);
@@ -240,12 +251,13 @@ impl LinkedList {
                 }
 
                 /* 3: Remove one or more marked nodes */
-                if (left_node
+                if left_node
                     .pointed_node()
-                    .compare_exchange(left_node_next.linked_value(), right_node.linked_value()))
-                .is_ok()
+                    .unwrap()
+                    .compare_exchange(left_node_next.linked_value(), right_node.linked_value())
+                    .is_ok()
                 {
-                    if (right_node.value() != EMPTY_FLAG) && right_node.pointed_node().is_marked() {
+                    if !right_node.is_null() && right_node.pointed_node().unwrap().is_marked() {
                         break;
                     } else {
                         return (left_node, right_node);

@@ -1,5 +1,8 @@
+use pi_pointer::NULL_PTR;
+
 use crate::linked_list;
-use crate::linked_list::EMPTY_FLAG;
+use crate::linked_list::LinkedList;
+// use crate::linked_list::EMPTY_FLAG;
 // use crate::Heap;
 // use crate::LockedHeapWithRescue;
 use core::mem::size_of;
@@ -31,7 +34,7 @@ fn test_linked_list() {
     assert_eq!(value4 + get_data_base(), &value3 as *const usize as usize);
     assert_eq!(value3 + get_data_base(), &value2 as *const usize as usize);
     assert_eq!(value2 + get_data_base(), &value1 as *const usize as usize);
-    assert_eq!(value1, EMPTY_FLAG as usize);
+    assert_eq!(value1, NULL_PTR as usize);
 
     // Test delete
     assert_eq!(list.delete(&mut value2 as *mut usize as *mut ()), true);
