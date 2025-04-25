@@ -1,7 +1,4 @@
 /// 位置无关的无锁侵入式链表
-use crate::get_data_base;
-use core::marker::PhantomData;
-use core::{fmt, ptr};
 // pub(crate) use node_ptr::EMPTY_FLAG;
 use node_ptr::{ListNode, MarkedPtr, NodePtr};
 use pi_pointer::{PIPtr, WrappedPtr};
@@ -10,6 +7,7 @@ use pi_pointer::{PIPtr, WrappedPtr};
 mod node_ptr;
 
 /// 用于测试
+#[allow(unused_imports)]
 pub(crate) use node_ptr::DELETE_MARK;
 
 /// An intrusive linked list
@@ -71,9 +69,9 @@ impl LinkedList {
 
     /// Try to remove the first item in the list
     pub fn pop(&self) -> Option<*mut ()> {
-        let mut left_node = NodePtr::null();
-        let mut right_node = NodePtr::null();
-        let mut right_node_value: MarkedPtr<PIPtr> = MarkedPtr::null();
+        let mut left_node: NodePtr;
+        let mut right_node: NodePtr;
+        let mut right_node_value: MarkedPtr<PIPtr>;
 
         // 查找与逻辑删除
         loop {
@@ -105,7 +103,6 @@ impl LinkedList {
         {
             let (_, _) = self.search_with_ptr(right_node.value());
         }
-        // assert!(!right_node.is_marked());
         return Some(right_node.value());
     }
 
@@ -115,9 +112,9 @@ impl LinkedList {
     /// 返回值true代表链表中有所找项并成功删除；false代表没有所找项。
     /// 不会出现链表中有所找项但删除失败的情况。
     pub fn delete(&self, item: *mut ()) -> bool {
-        let mut left_node = NodePtr::null();
-        let mut right_node = NodePtr::null();
-        let mut right_node_value: MarkedPtr<PIPtr> = MarkedPtr::null();
+        let mut left_node: NodePtr;
+        let mut right_node: NodePtr;
+        let mut right_node_value: MarkedPtr<PIPtr>;
 
         // 查找与逻辑删除
         loop {
@@ -149,7 +146,6 @@ impl LinkedList {
         {
             let (_, _) = self.search_with_ptr(right_node.value());
         }
-        // assert!(!right_node.is_marked());
         return true;
     }
 }
@@ -160,7 +156,7 @@ impl LinkedList {
         // 两个返回值分别为left_node和right_node
         let mut left_node: NodePtr = NodePtr::null();
         let mut left_node_next: NodePtr = NodePtr::null();
-        let mut right_node: NodePtr = NodePtr::null();
+        let mut right_node: NodePtr;
         loop {
             loop {
                 let mut t: NodePtr =
@@ -216,7 +212,7 @@ impl LinkedList {
         // 两个返回值分别为&head和head
         let mut left_node: NodePtr = NodePtr::null();
         let mut left_node_next: NodePtr = NodePtr::null();
-        let mut right_node: NodePtr = NodePtr::null();
+        let mut right_node: NodePtr;
         loop {
             loop {
                 let mut t: NodePtr =

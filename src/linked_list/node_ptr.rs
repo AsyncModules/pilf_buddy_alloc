@@ -71,7 +71,6 @@ impl ListNode {
     /// 该函数中不需要地址转换，因为其不涉及将指针存储入节点。
     /// SAFETY: its_ptr需要指向有效的ListNode
     pub(crate) unsafe fn from_its_ptr(its_ptr: *mut ()) -> &'static Self {
-        // AtomicPtr::from_ptr(its_ptr as *mut *mut ());
         &*(its_ptr as *mut Self)
     }
 
