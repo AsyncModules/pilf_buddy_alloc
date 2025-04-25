@@ -9,6 +9,9 @@ use core::mem::size_of;
 use core::ptr::null_mut;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
+use core::time::Duration;
+use std::sync::Barrier;
+use std::thread;
 
 /// 该函数用于test_linked_list和test_linked_list_concurrent
 #[no_mangle]
@@ -151,8 +154,8 @@ fn test_linked_list_concurrent() {
     use std::thread;
 
     const NUM_PRODUCERS: usize = 20;
-    const NUM_DELETE_CONSUMERS: usize = 20;
-    const NUM_POP_CONSUMERS: usize = 0;
+    const NUM_DELETE_CONSUMERS: usize = 10;
+    const NUM_POP_CONSUMERS: usize = 10;
     const NUM_DATA_PER_THREAD: usize = 500;
     assert!(NUM_PRODUCERS == NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS);
 
@@ -164,10 +167,12 @@ fn test_linked_list_concurrent() {
         Arc::new([const { AtomicUsize::new(0) }; NUM_PRODUCERS * NUM_DATA_PER_THREAD]);
     // println!("&value = {:?}", values.as_ptr_range());
     let list = Arc::new(linked_list::LinkedList::new());
+    // let barrier = Arc::new(Barrier::new(NUM_PRODUCERS + 1));
 
     for i in 0..NUM_PRODUCERS {
         let l = list.clone();
         let v = values.clone();
+        // let b = barrier.clone();
         handles.push(thread::spawn(move || {
             let mut value_ptr: [*mut (); NUM_DATA_PER_THREAD] = [null_mut(); NUM_DATA_PER_THREAD];
             // println!("&value = {:?}", v.as_ptr_range());
@@ -183,8 +188,13 @@ fn test_linked_list_concurrent() {
                     l.push(value_ptr[j]);
                 }
             }
+            // println!("producer {i} finished");
+
+            // b.wait();
         }));
     }
+
+    // barrier.wait();
 
     for i in 0..NUM_DELETE_CONSUMERS {
         let l = list.clone();
@@ -202,14 +212,14 @@ fn test_linked_list_concurrent() {
             while j < NUM_DATA_PER_THREAD {
                 if l.delete(value_ptr[j]) {
                     // 删除指定位置成功
-                    // p[i * NUM_DATA_PER_THREAD + j].fetch_add(1, Ordering::AcqRel);
+                    p[i * NUM_DATA_PER_THREAD + j].fetch_add(1, Ordering::AcqRel);
                     j += 1; // 只有删除成功才会增加删除计数
                 } else {
                     if let Some(ptr) = l.pop() {
                         // 删除指定位置失败，因此改为pop一个元素，以确保每个消费者删除的元素数量恒定
                         let offset =
                             (ptr as usize - v.as_ptr() as *const () as usize) / size_of::<usize>();
-                        // p[offset].fetch_add(1, Ordering::AcqRel);
+                        p[offset].fetch_add(1, Ordering::AcqRel);
                         j += 1; // 只有删除成功才会增加删除计数
                     }
                 }
@@ -217,20 +227,26 @@ fn test_linked_list_concurrent() {
         }));
     }
 
-    for _i in NUM_DELETE_CONSUMERS..NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS {
+    for i in NUM_DELETE_CONSUMERS..NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS {
         let l = list.clone();
         let v = values.clone();
         let p = pop_nums.clone();
         handles.push(thread::spawn(move || {
             let mut j = 0; // 删除计数
-            while j < NUM_DATA_PER_THREAD {
+            let pop_num = if i <= 0 {
+                NUM_DATA_PER_THREAD
+            } else {
+                NUM_DATA_PER_THREAD
+            };
+            while j < pop_num {
                 if let Some(ptr) = l.pop() {
                     let offset =
                         (ptr as usize - v.as_ptr() as *const () as usize) / size_of::<usize>();
-                    // p[offset].fetch_add(1, Ordering::AcqRel);
+                    p[offset].fetch_add(1, Ordering::AcqRel);
                     j += 1; // 只有删除成功才会增加删除计数
                 }
             }
+            // println!("consumer {i} finished");
         }));
     }
 
@@ -238,10 +254,16 @@ fn test_linked_list_concurrent() {
         handle.join().unwrap();
     }
 
-    // assert!(list.is_empty()); // 验证列表为空
-    // for i in 0..NUM_PRODUCERS * NUM_DATA_PER_THREAD {
-    //     assert!(pop_nums[i].load(Ordering::Acquire) == 1); // 验证所有元素恰好被取出一次。
+    // 用于多次运行；当持续时间过长，直接不通过
+    // thread::sleep(Duration::from_secs(1));
+    // for handle in handles {
+    //     assert!(handle.is_finished());
     // }
+
+    assert!(list.is_empty()); // 验证列表为空
+    for i in 0..NUM_PRODUCERS * NUM_DATA_PER_THREAD {
+        assert!(pop_nums[i].load(Ordering::Acquire) == 1); // 验证所有元素恰好被取出一次。
+    }
 }
 
 // static mut SPACE: [usize; 0x1000] = [0; 0x1000];

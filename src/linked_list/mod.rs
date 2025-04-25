@@ -75,42 +75,38 @@ impl LinkedList {
         let mut right_node = NodePtr::null();
         let mut right_node_value: MarkedPtr<PIPtr> = MarkedPtr::null();
 
+        // 查找与逻辑删除
         loop {
-            // 查找与逻辑删除
-            loop {
-                (left_node, right_node) = self.get_headptr_head();
-                if right_node.is_null() {
-                    return None;
-                }
-                right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
-                if !right_node_value.is_marked() {
-                    // 此处实际判断的是right_node节点是否被标记
-                    if right_node
-                        .pointed_node()
-                        .unwrap()
-                        .compare_exchange(right_node_value.value(), right_node_value.mark())
-                        .is_ok()
-                    {
-                        // 标记节点，代表该节点已被该线程所有。
-                        // 之后只需将其从链表上删除，或者等待其被删除即可。
-                        break;
-                    }
-                }
+            (left_node, right_node) = self.get_headptr_head();
+            if right_node.is_null() {
+                return None;
             }
-            // 物理删除
-            if left_node
-                .pointed_node()
-                .unwrap()
-                .compare_exchange(right_node.linked_value(), right_node_value.value())
-                .is_err()
-            {
-                let (_, _) = self.search_with_ptr(right_node.value());
-                // 之后回到大循环，因为需要重新pop一项出来
-            } else {
-                assert!(!right_node.is_marked());
-                return Some(right_node.value());
+            right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
+            if !right_node_value.is_marked() {
+                // 此处实际判断的是right_node节点是否被标记
+                if right_node
+                    .pointed_node()
+                    .unwrap()
+                    .compare_exchange(right_node_value.value(), right_node_value.mark())
+                    .is_ok()
+                {
+                    // 标记节点，代表该节点已被该线程所有。
+                    // 之后只需将其从链表上删除，或者等待其被删除即可。
+                    break;
+                }
             }
         }
+        // 物理删除
+        if left_node
+            .pointed_node()
+            .unwrap()
+            .compare_exchange(right_node.linked_value(), right_node_value.value())
+            .is_err()
+        {
+            let (_, _) = self.search_with_ptr(right_node.value());
+        }
+        // assert!(!right_node.is_marked());
+        return Some(right_node.value());
     }
 
     /// 从链表中查找指针所指的项并删除。
@@ -153,7 +149,7 @@ impl LinkedList {
         {
             let (_, _) = self.search_with_ptr(right_node.value());
         }
-        assert!(!right_node.is_marked());
+        // assert!(!right_node.is_marked());
         return true;
     }
 }
@@ -195,7 +191,7 @@ impl LinkedList {
                     if !right_node.is_null() && right_node.pointed_node().unwrap().is_marked() {
                         break;
                     } else {
-                        return (left_node, right_node); // 这里没有检查left_node指向的节点是否被标记？
+                        return (left_node, right_node);
                     }
                 }
 
