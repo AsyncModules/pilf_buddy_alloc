@@ -71,7 +71,6 @@ impl ListNode {
     /// 该函数中不需要地址转换，因为其不涉及将指针存储入节点。
     /// SAFETY: its_ptr需要指向有效的ListNode
     pub(crate) unsafe fn from_its_ptr(its_ptr: *mut ()) -> &'static Self {
-        // AtomicPtr::from_ptr(its_ptr as *mut *mut ());
         &*(its_ptr as *mut Self)
     }
 
@@ -169,14 +168,8 @@ impl NodePtr {
     /// 将指针转化为链表上存储的位置无关形式
     /// 可能带有标记
     pub fn linked_value(&self) -> *mut () {
-        // 虽然PIPtr::from_ptr中也有空指针判断，但无法检测出带标记的空指针
-        // 因此，在该函数中调用MarkedPtr::is_null()判断空指针
-        // 若指针非空，则使用PIPtr::from_ptr一定也认为指针非空而进行地址变换
-        if self.0.is_null() {
-            self.0.value()
-        } else {
-            PIPtr::from_ptr(self.0.value()).value()
-        }
+        let mark = (self.0.value() as usize) & DELETE_MARK;
+        (PIPtr::from_ptr(self.0.ptr()).value() as usize | mark) as *mut ()
     }
 }
 

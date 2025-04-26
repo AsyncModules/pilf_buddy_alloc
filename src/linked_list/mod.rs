@@ -1,7 +1,4 @@
 /// 位置无关的无锁侵入式链表
-use crate::get_data_base;
-use core::marker::PhantomData;
-use core::{fmt, ptr};
 // pub(crate) use node_ptr::EMPTY_FLAG;
 use node_ptr::{ListNode, MarkedPtr, NodePtr};
 use pi_pointer::{PIPtr, WrappedPtr};
@@ -10,6 +7,7 @@ use pi_pointer::{PIPtr, WrappedPtr};
 mod node_ptr;
 
 /// 用于测试
+#[allow(unused_imports)]
 pub(crate) use node_ptr::DELETE_MARK;
 
 /// An intrusive linked list
@@ -71,46 +69,41 @@ impl LinkedList {
 
     /// Try to remove the first item in the list
     pub fn pop(&self) -> Option<*mut ()> {
-        let mut left_node = NodePtr::null();
-        let mut right_node = NodePtr::null();
-        let mut right_node_value: MarkedPtr<PIPtr> = MarkedPtr::null();
+        let mut left_node: NodePtr;
+        let mut right_node: NodePtr;
+        let mut right_node_value: MarkedPtr<PIPtr>;
 
+        // 查找与逻辑删除
         loop {
-            // 查找与逻辑删除
-            loop {
-                (left_node, right_node) = self.get_headptr_head();
-                if right_node.is_null() {
-                    return None;
-                }
-                right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
-                if !right_node_value.is_marked() {
-                    // 此处实际判断的是right_node节点是否被标记
-                    if right_node
-                        .pointed_node()
-                        .unwrap()
-                        .compare_exchange(right_node_value.value(), right_node_value.mark())
-                        .is_ok()
-                    {
-                        // 标记节点，代表该节点已被该线程所有。
-                        // 之后只需将其从链表上删除，或者等待其被删除即可。
-                        break;
-                    }
-                }
+            (left_node, right_node) = self.get_headptr_head();
+            if right_node.is_null() {
+                return None;
             }
-            // 物理删除
-            if left_node
-                .pointed_node()
-                .unwrap()
-                .compare_exchange(right_node.linked_value(), right_node_value.value())
-                .is_err()
-            {
-                let (_, _) = self.search_with_ptr(right_node.value());
-                // 之后回到大循环，因为需要重新pop一项出来
-            } else {
-                assert!(!right_node.is_marked());
-                return Some(right_node.value());
+            right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
+            if !right_node_value.is_marked() {
+                // 此处实际判断的是right_node节点是否被标记
+                if right_node
+                    .pointed_node()
+                    .unwrap()
+                    .compare_exchange(right_node_value.value(), right_node_value.mark())
+                    .is_ok()
+                {
+                    // 标记节点，代表该节点已被该线程所有。
+                    // 之后只需将其从链表上删除，或者等待其被删除即可。
+                    break;
+                }
             }
         }
+        // 物理删除
+        if left_node
+            .pointed_node()
+            .unwrap()
+            .compare_exchange(right_node.linked_value(), right_node_value.value())
+            .is_err()
+        {
+            let (_, _) = self.search_with_ptr(right_node.value());
+        }
+        return Some(right_node.value());
     }
 
     /// 从链表中查找指针所指的项并删除。
@@ -119,9 +112,9 @@ impl LinkedList {
     /// 返回值true代表链表中有所找项并成功删除；false代表没有所找项。
     /// 不会出现链表中有所找项但删除失败的情况。
     pub fn delete(&self, item: *mut ()) -> bool {
-        let mut left_node = NodePtr::null();
-        let mut right_node = NodePtr::null();
-        let mut right_node_value: MarkedPtr<PIPtr> = MarkedPtr::null();
+        let mut left_node: NodePtr;
+        let mut right_node: NodePtr;
+        let mut right_node_value: MarkedPtr<PIPtr>;
 
         // 查找与逻辑删除
         loop {
@@ -153,7 +146,6 @@ impl LinkedList {
         {
             let (_, _) = self.search_with_ptr(right_node.value());
         }
-        assert!(!right_node.is_marked());
         return true;
     }
 }
@@ -164,7 +156,7 @@ impl LinkedList {
         // 两个返回值分别为left_node和right_node
         let mut left_node: NodePtr = NodePtr::null();
         let mut left_node_next: NodePtr = NodePtr::null();
-        let mut right_node: NodePtr = NodePtr::null();
+        let mut right_node: NodePtr;
         loop {
             loop {
                 let mut t: NodePtr =
@@ -195,7 +187,7 @@ impl LinkedList {
                     if !right_node.is_null() && right_node.pointed_node().unwrap().is_marked() {
                         break;
                     } else {
-                        return (left_node, right_node); // 这里没有检查left_node指向的节点是否被标记？
+                        return (left_node, right_node);
                     }
                 }
 
@@ -220,7 +212,7 @@ impl LinkedList {
         // 两个返回值分别为&head和head
         let mut left_node: NodePtr = NodePtr::null();
         let mut left_node_next: NodePtr = NodePtr::null();
-        let mut right_node: NodePtr = NodePtr::null();
+        let mut right_node: NodePtr;
         loop {
             loop {
                 let mut t: NodePtr =
