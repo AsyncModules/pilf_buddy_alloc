@@ -6,11 +6,8 @@ use core::ptr::null_mut;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
-/// 该函数用于test_linked_list和test_linked_list_concurrent
-#[no_mangle]
-fn get_data_base() -> usize {
-    0x8000
-}
+use crate::get_data_base;
+
 #[test]
 fn test_linked_list_func() {
     let mut value1: usize = 0;

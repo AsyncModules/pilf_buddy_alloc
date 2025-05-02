@@ -1,34 +1,20 @@
 //! 这个库是直接参考 rcore-os 组织下的 [buddy_system_allocator](https://github.com/rcore-os/buddy_system_allocator)
-//! 实现的位置无关的堆分配器
-//! 用在 vDSO 中
-//! 测试用例在 tests 目录中，进行了简单的测试
-//! 后续的改进方向可以将这个库实现为无锁的方式？
-//! 目前是使用了自旋锁
-//! 因此，需要保证在中断处理例程中不会使用堆分配器，直接使用预先分配的即可
+//! 实现的位置无关的堆分配器，用在 vDSO 中
+//! list_tests.rs 中进行了简单的测试以及大规模的并发测试
+//! heap_tests.rs 中对无锁堆分配器进行了简单的测试，没有进行大规模并发测试
 #![cfg_attr(not(test), no_std)]
-
-use pi_pointer::GetDataBase;
 
 mod imp;
 mod linked_list;
 pub use imp::LockFreeHeap;
 pub use linked_list::LinkedList;
 
-extern "C" {
-    fn get_data_base() -> usize;
-}
+#[cfg(test)]
+mod list_tests;
 
 #[cfg(test)]
-mod tests {
-    include!("./tests/list_tests.rs");
-    include!("./tests/heap_tests.rs");
-}
+mod heap_tests;
 
-struct GetDataBaseImpl;
-
-#[crate_interface::impl_interface]
-impl GetDataBase for GetDataBaseImpl {
-    fn get_data_base() -> usize {
-        unsafe { get_data_base() }
-    }
+pub fn get_data_base() -> usize {
+    crate_interface::call_interface!(pi_pointer::GetDataBase::get_data_base)
 }
