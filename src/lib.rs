@@ -12,6 +12,12 @@ pub use linked_list::LinkedList;
 #[cfg(test)]
 mod list_tests;
 
+/// SAFETY:
+///
+/// 直接针对整个模块进行测试的时候，可能会使用并行的测试，
+/// 但是 `get_data_base` 是使用一个全局变量来存储数据段的基地址，
+/// 在进行不同的测试时，可能会导致出错，因此需要单独对每个函数进行测试，而不是整体测试
+/// 或者传递参数 `--test-threads=1`
 #[cfg(test)]
 mod heap_tests;
 
