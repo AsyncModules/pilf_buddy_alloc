@@ -44,10 +44,10 @@ fn test_heap_add_large() {
     assert!(heap.alloc_(Layout::from_size_align(1, 1).unwrap()).is_err());
 
     // 512 bytes of space
-    let space: [u8; 512] = [0; 512];
+    let space: [usize; 64] = [0; 64];
     HEAP_BASE.store(space.as_ptr() as usize, Ordering::Relaxed);
     unsafe {
-        heap.add_to_heap(space.as_ptr() as usize, space.as_ptr().add(512) as usize);
+        heap.add_to_heap(space.as_ptr() as usize, space.as_ptr().add(64) as usize);
     }
     let addr = heap.alloc_(Layout::from_size_align(1, 1).unwrap());
     assert!(addr.is_ok());

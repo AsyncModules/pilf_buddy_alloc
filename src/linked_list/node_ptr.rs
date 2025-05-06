@@ -2,6 +2,9 @@ use core::sync::atomic::AtomicPtr;
 
 use pi_pointer::{AtomicWrappedPtr, PIPtr, WrappedPtr, NULL_PTR};
 
+// 此处，使用了指针的最低位作为标记。
+// 为了保证这样带标记的指针能够进行正常的位置无关地址转换，
+// 从get_data_base获取的基地址需要至少按2字节对齐。
 #[derive(Copy, Clone)]
 pub(crate) struct MarkedPtr<T: WrappedPtr>(T);
 pub(crate) const DELETE_MARK: usize = 0b1;
