@@ -86,7 +86,7 @@ impl<const ORDER: usize> LockFreeHeap<ORDER> {
     }
 
     /// Add a range of memory [start, start+size) to the heap
-    pub unsafe fn init(&mut self, start: usize, size: usize) {
+    pub unsafe fn init(&self, start: usize, size: usize) {
         self.add_to_heap(start, start + size);
     }
 
