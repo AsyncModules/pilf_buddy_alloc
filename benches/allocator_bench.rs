@@ -145,9 +145,13 @@ const MACHINE_ALIGN: usize = core::mem::size_of::<usize>();
 /// TODO: reduce memory use
 const KERNEL_HEAP_SIZE: usize = 128 * 1024 * 1024;
 const HEAP_BLOCK: usize = KERNEL_HEAP_SIZE / MACHINE_ALIGN;
-static mut HEAP: [usize; HEAP_BLOCK] = [0; HEAP_BLOCK];
 
-/// 这个实现是用来进行单元测试的，list_test 也是用这个函数
+#[repr(C, align(0x1000))]
+struct HeapSpace(pub(crate) [usize; HEAP_BLOCK]);
+
+static mut HEAP: HeapSpace = HeapSpace([0; HEAP_BLOCK]);
+
+/// The base address of the heap
 struct GetDataBaseImpl;
 
 #[crate_interface::impl_interface]
