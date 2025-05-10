@@ -1,5 +1,4 @@
 /// 位置无关的无锁侵入式链表
-// pub(crate) use node_ptr::EMPTY_FLAG;
 use node_ptr::{ListNode, MarkedPtr, NodePtr};
 use pi_pointer::{PIPtr, WrappedPtr};
 
@@ -81,7 +80,6 @@ impl LinkedList {
             }
             right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
             if !right_node_value.is_marked() {
-                // 此处实际判断的是right_node节点是否被标记
                 if right_node
                     .pointed_node()
                     .unwrap()
@@ -124,7 +122,6 @@ impl LinkedList {
             }
             right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
             if !right_node_value.is_marked() {
-                // 此处实际判断的是right_node节点是否被标记
                 if right_node
                     .pointed_node()
                     .unwrap()

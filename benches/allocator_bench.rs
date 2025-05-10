@@ -186,9 +186,10 @@ fn init_heap() {
 /// Entry of benchmarks
 pub fn criterion_benchmark(c: &mut Criterion) {
     // run benchmark
-    c.bench_function("small alloc", |b| {
-        b.iter(|| small_alloc(black_box(&HEAP_ALLOCATOR)))
-    });
+    c.bench_function("empty", |b| b.iter(|| {})); // 即使测试函数什么都不做，也会出现bug。
+    // c.bench_function("small alloc", |b| {
+    //     b.iter(|| small_alloc(black_box(&HEAP_ALLOCATOR)))
+    // });
     // c.bench_function("large alloc", |b| {
     //     b.iter(|| large_alloc(black_box(&HEAP_ALLOCATOR)))
     // });

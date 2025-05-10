@@ -1,9 +1,14 @@
 use crate::LockFreeHeap;
 use core::{
-    alloc::Layout,
+    alloc::{GlobalAlloc, Layout},
     sync::atomic::{AtomicUsize, Ordering},
 };
+use ctor::ctor;
 use pi_pointer::GetDataBase;
+use std::{
+    sync::Arc,
+    thread::{spawn, JoinHandle},
+};
 
 /// 这个实现是用来进行单元测试的，list_test 也是用这个函数
 struct GetDataBaseImpl;
@@ -114,4 +119,129 @@ fn test_heap_merge_final_order() {
 
     // deallocation should not attempt to merge the two contiguous ranges as the next order does not exist
     heap.dealloc_(alloc, layout);
+}
+
+const SMALL_SIZE: usize = 8;
+const LARGE_SIZE: usize = 1024 * 1024; // 1M
+const ALIGN: usize = 8;
+const ORDER: usize = 33;
+const MACHINE_ALIGN: usize = core::mem::size_of::<usize>();
+/// for now 128M is needed
+/// TODO: reduce memory use
+const KERNEL_HEAP_SIZE: usize = 128 * 1024 * 1024;
+const HEAP_BLOCK: usize = KERNEL_HEAP_SIZE / MACHINE_ALIGN;
+#[repr(C, align(0x1000))]
+struct HeapSpace(pub(crate) [usize; HEAP_BLOCK]);
+static mut HEAP: HeapSpace = HeapSpace([0; HEAP_BLOCK]);
+
+// #[global_allocator]
+static HEAP_ALLOCATOR: LockFreeHeap<ORDER> = LockFreeHeap::<ORDER>::new();
+
+/// Init heap
+///
+/// We need `ctor` here because benchmark is running behind the std enviroment,
+/// which means std will do some initialization before execute `fn main()`.
+/// However, our memory allocator must be init in runtime(use linkedlist, which
+/// can not be evaluated in compile time). And in the initialization phase, heap
+/// memory is needed.
+///
+/// So the solution in this dilemma is to run `fn init_heap()` in initialization phase
+/// rather than in `fn main()`. We need `ctor` to do this.
+// #[ctor]
+fn init_heap() {
+    let heap_start = &raw mut HEAP as *mut _ as usize;
+    unsafe {
+        HEAP_ALLOCATOR.init(heap_start, HEAP_BLOCK * MACHINE_ALIGN);
+    }
+}
+
+// 运行该测试时，需要注释#[global_allocator]和#[ctor]两个注解
+// PASSED
+#[test]
+fn test_singlethread() {
+    init_heap();
+    unsafe {
+        println!("{:?}", HEAP_ALLOCATOR);
+        let small_layout = Layout::from_size_align_unchecked(SMALL_SIZE, ALIGN);
+        let small_addr = HEAP_ALLOCATOR.alloc(small_layout);
+        assert!(!small_addr.is_null());
+        *(small_addr as *mut () as *mut usize) = 42;
+        println!("{:?}", HEAP_ALLOCATOR);
+        assert!(*(small_addr as *mut () as *mut usize) == 42);
+        let large_layout = Layout::from_size_align_unchecked(LARGE_SIZE, ALIGN);
+        let large_addr = HEAP_ALLOCATOR.alloc(large_layout);
+        assert!(!large_addr.is_null());
+        *(large_addr as *mut () as *mut usize) = 42;
+        println!("{:?}", HEAP_ALLOCATOR);
+        assert!(*(large_addr as *mut () as *mut usize) == 42);
+        HEAP_ALLOCATOR.dealloc(small_addr, small_layout);
+        HEAP_ALLOCATOR.dealloc(large_addr, large_layout);
+    }
+}
+
+// 运行该测试时，需要注释#[global_allocator]和#[ctor]两个注解
+// FAILED
+#[test]
+fn test_multithread() {
+    init_heap();
+    println!("{:?}", HEAP_ALLOCATOR);
+    let mut handles: Vec<JoinHandle<()>> = Vec::new();
+    for _ in 0..100 {
+        handles.push(spawn(|| unsafe {
+            for _ in 0..100 {
+                let small_layout = Layout::from_size_align_unchecked(SMALL_SIZE, ALIGN);
+                let small_addr = HEAP_ALLOCATOR.alloc(small_layout);
+                assert!(!small_addr.is_null());
+                *(small_addr as *mut () as *mut usize) = 1;
+                assert!(*(small_addr as *mut () as *mut usize) == 1);
+                // let large_layout = Layout::from_size_align_unchecked(LARGE_SIZE, ALIGN);
+                // let large_addr = HEAP_ALLOCATOR.alloc(large_layout);
+                // assert!(!large_addr.is_null());
+                // *(large_addr as *mut () as *mut usize) = 42;
+                // assert!(*(large_addr as *mut () as *mut usize) == 42);
+                HEAP_ALLOCATOR.dealloc(small_addr, small_layout);
+                // HEAP_ALLOCATOR.dealloc(large_addr, large_layout);
+            }
+        }));
+    }
+    for h in handles {
+        assert!(h.join().is_ok());
+    }
+    println!("{:?}", HEAP_ALLOCATOR);
+}
+
+// 运行该测试时，需要取消注释#[global_allocator]和#[ctor]两个注解
+// PASSED
+#[test]
+fn test_global_allocator_singlethread() {
+    println!("{:?}", HEAP_ALLOCATOR);
+    let small: Box<usize> = Box::new(42);
+    println!("{:?}", HEAP_ALLOCATOR);
+    assert!(*small == 42);
+    let large: Box<[usize; LARGE_SIZE / size_of::<usize>()]> =
+        Box::new([0; LARGE_SIZE / size_of::<usize>()]);
+    println!("{:?}", HEAP_ALLOCATOR);
+    assert!((*large)[42] == 0);
+}
+
+// 运行该测试时，需要取消注释#[global_allocator]和#[ctor]两个注解
+// FAILED
+#[test]
+fn test_global_allocator_multithread() {
+    let mut handles: Vec<JoinHandle<()>> = Vec::new();
+    for _ in 0..100 {
+        handles.push(spawn(|| {
+            // for _ in 0..100 {
+            //     let small: Box<usize> = Box::new(42);
+            //     assert!(*small == 42);
+            //     let large: Box<[usize; LARGE_SIZE / size_of::<usize>()]> =
+            //         Box::new([0; LARGE_SIZE / size_of::<usize>()]);
+            //     assert!((*large)[42] == 0);
+            // }
+        }));
+    }
+    for h in handles {
+        assert!(h.join().is_ok());
+    }
+    println!("{:?}", HEAP_ALLOCATOR);
 }
