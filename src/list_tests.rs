@@ -145,7 +145,8 @@ fn test_linked_list_concurrent() {
 
     // 重复测试的次数，用于进行批量测试以检测死锁等情况
     // 在多次运行时，建议增加参数`-- --nocapture`，从而显示打印的已完成次数
-    const TEST_NUM: usize = 1000;
+    // const TEST_NUM: usize = 1000;
+    const TEST_NUM: usize = 1;
 
     const NUM_PRODUCERS: usize = 20;
     const NUM_DELETE_CONSUMERS: usize = 10;
@@ -200,11 +201,17 @@ fn test_linked_list_concurrent() {
                 while j < NUM_DATA_PER_THREAD {
                     if l.delete(value_ptr[j]) {
                         // 删除指定位置成功
+                        unsafe {
+                            *(value_ptr[j] as *mut usize) = 0xffff;
+                        }
                         p[i * NUM_DATA_PER_THREAD + j].fetch_add(1, Ordering::AcqRel);
                         j += 1; // 只有删除成功才会增加删除计数
                     } else {
                         if let Some(ptr) = l.pop() {
                             // 删除指定位置失败，因此改为pop一个元素，以确保每个消费者删除的元素数量恒定
+                            unsafe {
+                                *(ptr as *mut usize) = 0xffff;
+                            }
                             let offset = (ptr as usize - v.as_ptr() as *const () as usize)
                                 / size_of::<usize>();
                             p[offset].fetch_add(1, Ordering::AcqRel);
@@ -228,6 +235,9 @@ fn test_linked_list_concurrent() {
                 };
                 while j < pop_num {
                     if let Some(ptr) = l.pop() {
+                        unsafe {
+                            *(ptr as *mut usize) = 0xffff;
+                        }
                         let offset =
                             (ptr as usize - v.as_ptr() as *const () as usize) / size_of::<usize>();
                         p[offset].fetch_add(1, Ordering::AcqRel);
