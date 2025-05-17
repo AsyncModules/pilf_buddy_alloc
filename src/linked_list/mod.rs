@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicUsize, Ordering};
+
 /// 位置无关的无锁侵入式链表
 use node_ptr::{ListNode, MarkedPtr, NodePtr};
 use pi_pointer::{PIPtr, WrappedPtr};
@@ -46,11 +48,13 @@ impl LinkedList {
     }
 
     /// Push `item` to the front of the list
-    /// SAFETY: item需要指向一个有效的内存地址
+    /// SAFETY: item需要指向一个有效的、大小至少16字节的内存地址
     pub unsafe fn push(&self, item: *mut ()) {
+        let rc: &AtomicUsize = unsafe { &*(item as *mut AtomicUsize).add(1) };
+        rc.store(0, Ordering::Release);
+        let new_node = NodePtr::from_value(item);
         loop {
             let (left_node, right_node) = self.get_headptr_head();
-            let new_node = NodePtr::from_value(item);
             new_node
                 .pointed_node()
                 .unwrap()
@@ -101,6 +105,9 @@ impl LinkedList {
         {
             let (_, _) = self.search_with_ptr(right_node.value());
         }
+
+        // 等待其它线程不再占用right_node
+        while right_node.pointed_node().unwrap().rc() > 1 {}
         return Some(right_node.value());
     }
 
@@ -143,6 +150,9 @@ impl LinkedList {
         {
             let (_, _) = self.search_with_ptr(right_node.value());
         }
+
+        // 等待其它线程不再占用right_node
+        while right_node.pointed_node().unwrap().rc() > 1 {}
         return true;
     }
 }
@@ -164,7 +174,7 @@ impl LinkedList {
                 loop {
                     if !t_next.is_marked() {
                         left_node = t;
-                        left_node_next = t_next;
+                        left_node_next = t_next.clone();
                     }
                     t = NodePtr::from_value(t_next.unmark());
                     if t.is_null() {
@@ -178,6 +188,7 @@ impl LinkedList {
                     }
                 }
                 right_node = t;
+                drop(t_next);
 
                 /* 2: Check nodes are adjacent*/
                 if left_node_next.value() == right_node.value() {
@@ -220,7 +231,7 @@ impl LinkedList {
                 loop {
                     if !t_next.is_marked() {
                         left_node = t;
-                        left_node_next = t_next;
+                        left_node_next = t_next.clone();
                     }
                     t = NodePtr::from_value(t_next.unmark());
                     if t.is_null() {
@@ -233,6 +244,7 @@ impl LinkedList {
                     }
                 }
                 right_node = t;
+                drop(t_next);
 
                 /* 2: Check nodes are adjacent*/
                 if left_node_next.value() == right_node.value() {

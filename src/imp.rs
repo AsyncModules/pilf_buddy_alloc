@@ -58,14 +58,14 @@ impl<const ORDER: usize> LockFreeHeap<ORDER> {
     /// Add a range of memory [start, end) to the heap
     pub unsafe fn add_to_heap(&self, mut start: usize, mut end: usize) {
         // avoid unaligned access on some platforms
-        start = (start + size_of::<usize>() - 1) & (!size_of::<usize>() + 1);
-        end &= !size_of::<usize>() + 1;
+        start = (start + size_of::<[usize; 2]>() - 1) & (!size_of::<[usize; 2]>() + 1);
+        end &= !size_of::<[usize; 2]>() + 1;
         assert!(start <= end);
 
         let mut total = 0;
         let mut current_start = start;
 
-        while current_start + size_of::<usize>() <= end {
+        while current_start + size_of::<[usize; 2]>() <= end {
             let lowbit = current_start & (!current_start + 1);
             let mut size = min(lowbit, prev_power_of_two(end - current_start));
 
@@ -95,7 +95,7 @@ impl<const ORDER: usize> LockFreeHeap<ORDER> {
     pub fn alloc_(&self, layout: Layout) -> Result<NonNull<u8>, ()> {
         let size = max(
             layout.size().next_power_of_two(),
-            max(layout.align(), size_of::<usize>()),
+            max(layout.align(), size_of::<[usize; 2]>()),
         );
         let class = size.trailing_zeros() as usize;
         let mut current_block;
@@ -135,7 +135,7 @@ impl<const ORDER: usize> LockFreeHeap<ORDER> {
     pub fn dealloc_(&self, ptr: NonNull<u8>, layout: Layout) {
         let size = max(
             layout.size().next_power_of_two(),
-            max(layout.align(), size_of::<usize>()),
+            max(layout.align(), size_of::<[usize; 2]>()),
         );
         let class = size.trailing_zeros() as usize;
 
