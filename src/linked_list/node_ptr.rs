@@ -82,12 +82,28 @@ impl ListNode {
         &*(its_ptr as *mut Self)
     }
 
-    pub(crate) fn next(&'static self) -> Option<&'static Self> {
-        let value = self.ptr.load();
-        if value.is_null() {
-            None
-        } else {
-            unsafe { Some(Self::from_its_ptr(value.ptr())) }
+    // pub(crate) fn next(&'static self) -> Option<&'static Self> {
+    //     let value = self.ptr.load();
+    //     if value.is_null() {
+    //         None
+    //     } else {
+    //         unsafe { Some(Self::from_its_ptr(value.ptr())) }
+    //     }
+    // }
+
+    /// 以NodePtr形式，返回节点自身指向的下一个节点的指针
+    pub(crate) fn marked_ptr(&self) -> NodePtr {
+        let mut ptr = NodePtr::from_marked_ptr(self.ptr.load().marked_ptr());
+        loop {
+            let new_ptr = NodePtr::from_marked_ptr(self.ptr.load().marked_ptr());
+            // 在NodePtr构造函数中增加引用计数后，验证self的（去掉标记的）值是否改变
+            // 若未改变，则说明ptr指向的节点不会在增加引用计数前被释放，因此可以返回ptr
+            // 否则，需要重新获取ptr
+            if ptr.unmark() == new_ptr.unmark() {
+                assert!(ptr.is_null() || unsafe { *(ptr.ptr() as *mut usize) } != 3);
+                return ptr;
+            }
+            ptr = new_ptr
         }
     }
 
@@ -97,8 +113,8 @@ impl ListNode {
 
     pub(crate) fn rc_decrease(&self) {
         self.rc.fetch_sub(1, Ordering::AcqRel);
-        assert!(self.rc.load(Ordering::Acquire) & (usize::MAX - (usize::MAX >> 1)) == 0);
         // 溢出检测
+        assert!(self.rc.load(Ordering::Acquire) & (usize::MAX - (usize::MAX >> 1)) == 0);
     }
 
     pub(crate) fn rc(&self) -> usize {
@@ -164,10 +180,6 @@ impl ListNode {
     pub(crate) fn unmark(&self) -> *mut () {
         self.ptr.load().unmark()
     }
-
-    pub(crate) fn marked_ptr(&self) -> NodePtr {
-        NodePtr::from_marked_ptr(self.ptr.load().marked_ptr())
-    }
 }
 
 /// 该类型代表指向链表节点的指针（且指针自身的位置不在链表上）。
@@ -209,14 +221,10 @@ impl NodePtr {
     /// 获取指针指向的下一个节点的指针
     /// 如果指针指向的节点值为NULL_PTR，返回Some(NULL_PTR)
     /// 如果指针自身值为NULL_PTR，返回None
-    /// 与ListNode::next不同，该函数还包含将ListNode转化为NodePtr的过程。
+    /// 与ListNode::next不同，该函数还包含将ListNode转化为NodePtr的过程
     pub fn next(&self) -> Option<Self> {
         if let Some(node) = self.pointed_node() {
-            let next = Self(node.ptr.load().marked_ptr());
-            if let Some(node_) = next.pointed_node() {
-                node_.rc_increase();
-            }
-            Some(next)
+            Some(node.marked_ptr())
         } else {
             None
         }

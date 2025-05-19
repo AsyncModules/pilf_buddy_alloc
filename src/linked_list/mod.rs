@@ -1,4 +1,7 @@
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{
+    hint::spin_loop,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 /// 位置无关的无锁侵入式链表
 use node_ptr::{ListNode, MarkedPtr, NodePtr};
@@ -103,11 +106,17 @@ impl LinkedList {
             .compare_exchange(right_node.linked_value(), right_node_value.value())
             .is_err()
         {
-            let (_, _) = self.search_with_ptr(right_node.value());
+            let (_, new_right_node) = self.search_with_ptr(right_node.ptr());
+            // 验证right_node已从链表中删去，即以right_node从链表中搜索到的节点不是right_node
+            assert!(new_right_node.ptr() != right_node.ptr());
         }
 
+        drop(left_node);
         // 等待其它线程不再占用right_node
-        while right_node.pointed_node().unwrap().rc() > 1 {}
+        while right_node.pointed_node().unwrap().rc() > 1 {
+            spin_loop();
+        }
+        // assert!(right_node.pointed_node().unwrap().rc() == 1);
         return Some(right_node.value());
     }
 
@@ -148,18 +157,24 @@ impl LinkedList {
             .compare_exchange(right_node.linked_value(), right_node_value.value())
             .is_err()
         {
-            let (_, _) = self.search_with_ptr(right_node.value());
+            let (_, new_right_node) = self.search_with_ptr(right_node.ptr());
+            // 验证right_node已从链表中删去，即以right_node从链表中搜索到的节点不是right_node
+            assert!(new_right_node.ptr() != right_node.ptr());
         }
 
+        drop(left_node);
         // 等待其它线程不再占用right_node
-        while right_node.pointed_node().unwrap().rc() > 1 {}
+        while right_node.pointed_node().unwrap().rc() > 1 {
+            spin_loop();
+        }
+        // assert!(right_node.pointed_node().unwrap().rc() == 1);
         return true;
     }
 }
 
 // private函数
 impl LinkedList {
-    fn search_with_ptr(&self, item: *mut ()) -> (NodePtr, NodePtr) {
+    pub(crate) fn search_with_ptr(&self, item: *mut ()) -> (NodePtr, NodePtr) {
         // 两个返回值分别为left_node和right_node
         let mut left_node: NodePtr = NodePtr::null();
         let mut left_node_next: NodePtr = NodePtr::null();
@@ -171,6 +186,7 @@ impl LinkedList {
                 let mut t_next: NodePtr = self.head.marked_ptr();
 
                 /* 1: Find left_node and right_node */
+                let mut found: bool = false;
                 loop {
                     if !t_next.is_marked() {
                         left_node = t;
@@ -181,8 +197,11 @@ impl LinkedList {
                         break;
                     }
                     t_next = t.next().unwrap();
+                    if t.ptr() == item {
+                        found = true;
+                    }
                     // rust没有do-while，因此这样退出循环
-                    if !(t_next.is_marked() || (t.ptr() != item)) {
+                    if !t_next.is_marked() && found {
                         // if的第二个条件，将原论文的按值查找改为了按指针查找
                         break;
                     }
