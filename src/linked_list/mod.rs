@@ -1,6 +1,6 @@
 use core::{
     hint::spin_loop,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
 };
 
 /// 位置无关的无锁侵入式链表
@@ -13,6 +13,12 @@ mod node_ptr;
 /// 用于测试
 #[allow(unused_imports)]
 pub(crate) use node_ptr::DELETE_MARK;
+
+/// 用于debug
+/// 将链表节点的指针限制在[NODE_LBOUND, NODE_UBOUND)范围内
+/// 因此链表节点的取值也限制在[NODE_LBOUND, NODE_UBOUND)∪{NULL_PTR, NULL_PTR | DELETE_MARK}范围内。
+pub(crate) static NODE_UBOUND: AtomicPtr<()> = AtomicPtr::new(0 as *mut ());
+pub(crate) static NODE_LBOUND: AtomicPtr<()> = AtomicPtr::new(0 as *mut ());
 
 /// An intrusive linked list
 ///
@@ -53,8 +59,10 @@ impl LinkedList {
     /// Push `item` to the front of the list
     /// SAFETY: item需要指向一个有效的、大小至少16字节的内存地址
     pub unsafe fn push(&self, item: *mut ()) {
+        assert!((item as usize) >= (NODE_LBOUND.load(Ordering::SeqCst) as usize));
+        assert!((item as usize) < (NODE_UBOUND.load(Ordering::SeqCst) as usize));
         let rc: &AtomicUsize = unsafe { &*(item as *mut AtomicUsize).add(1) };
-        rc.store(0, Ordering::Release);
+        rc.store(0, Ordering::SeqCst);
         let new_node = NodePtr::from_value(item);
         loop {
             let (left_node, right_node) = self.get_headptr_head();
@@ -87,6 +95,16 @@ impl LinkedList {
             }
             right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
             if !right_node_value.is_marked() {
+                if !right_node_value.is_null() {
+                    assert!(
+                        (right_node_value.value() as usize)
+                            >= (NODE_LBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                    assert!(
+                        (right_node_value.value() as usize)
+                            < (NODE_UBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                }
                 if right_node
                     .pointed_node()
                     .unwrap()
@@ -100,6 +118,15 @@ impl LinkedList {
             }
         }
         // 物理删除
+        if !right_node_value.is_null() {
+            assert!(
+                (right_node_value.value() as usize)
+                    >= (NODE_LBOUND.load(Ordering::SeqCst) as usize)
+            );
+            assert!(
+                (right_node_value.value() as usize) < (NODE_UBOUND.load(Ordering::SeqCst) as usize)
+            );
+        }
         if left_node
             .pointed_node()
             .unwrap()
@@ -138,6 +165,16 @@ impl LinkedList {
             }
             right_node_value = right_node.pointed_node().unwrap().load(); // 位置无关，但可能有标记
             if !right_node_value.is_marked() {
+                if !right_node_value.is_null() {
+                    assert!(
+                        (right_node_value.value() as usize)
+                            >= (NODE_LBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                    assert!(
+                        (right_node_value.value() as usize)
+                            < (NODE_UBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                }
                 if right_node
                     .pointed_node()
                     .unwrap()
@@ -151,6 +188,15 @@ impl LinkedList {
             }
         }
         // 物理删除
+        if !right_node_value.is_null() {
+            assert!(
+                (right_node_value.value() as usize)
+                    >= (NODE_LBOUND.load(Ordering::SeqCst) as usize)
+            );
+            assert!(
+                (right_node_value.value() as usize) < (NODE_UBOUND.load(Ordering::SeqCst) as usize)
+            );
+        }
         if left_node
             .pointed_node()
             .unwrap()
@@ -219,6 +265,16 @@ impl LinkedList {
                 }
 
                 /* 3: Remove one or more marked nodes */
+                if !right_node.is_null() {
+                    assert!(
+                        (right_node.value() as usize)
+                            >= (NODE_LBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                    assert!(
+                        (right_node.value() as usize)
+                            < (NODE_UBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                }
                 if left_node
                     .pointed_node()
                     .unwrap()
@@ -275,6 +331,16 @@ impl LinkedList {
                 }
 
                 /* 3: Remove one or more marked nodes */
+                if !right_node.is_null() {
+                    assert!(
+                        (right_node.value() as usize)
+                            >= (NODE_LBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                    assert!(
+                        (right_node.value() as usize)
+                            < (NODE_UBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                }
                 if left_node
                     .pointed_node()
                     .unwrap()

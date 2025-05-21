@@ -18,7 +18,7 @@ static HEAP_BASE: AtomicUsize = AtomicUsize::new(0);
 #[crate_interface::impl_interface]
 impl GetDataBase for GetDataBaseImpl {
     fn get_data_base() -> usize {
-        HEAP_BASE.load(Ordering::Relaxed)
+        HEAP_BASE.load(Ordering::SeqCst)
     }
 }
 
@@ -34,7 +34,7 @@ fn test_heap_add() {
     assert!(heap.alloc_(Layout::from_size_align(1, 1).unwrap()).is_err());
 
     let space: [usize; 100] = [0; 100];
-    HEAP_BASE.store(space.as_ptr() as usize, Ordering::Relaxed);
+    HEAP_BASE.store(space.as_ptr() as usize, Ordering::SeqCst);
     unsafe {
         heap.add_to_heap(space.as_ptr() as usize, space.as_ptr().add(100) as usize);
     }
@@ -50,7 +50,7 @@ fn test_heap_add_large() {
 
     // 512 bytes of space
     let space: [usize; 64] = [0; 64];
-    HEAP_BASE.store(space.as_ptr() as usize, Ordering::Relaxed);
+    HEAP_BASE.store(space.as_ptr() as usize, Ordering::SeqCst);
     unsafe {
         heap.add_to_heap(space.as_ptr() as usize, space.as_ptr().add(64) as usize);
     }
@@ -62,7 +62,7 @@ fn test_heap_add_large() {
 fn test_heap_oom() {
     let heap = LockFreeHeap::<32>::new();
     let space: [usize; 100] = [0; 100];
-    HEAP_BASE.store(space.as_ptr() as usize, Ordering::Relaxed);
+    HEAP_BASE.store(space.as_ptr() as usize, Ordering::SeqCst);
     unsafe {
         heap.add_to_heap(space.as_ptr() as usize, space.as_ptr().add(100) as usize);
     }
@@ -79,7 +79,7 @@ fn test_heap_alloc_and_free() {
     assert!(heap.alloc_(Layout::from_size_align(1, 1).unwrap()).is_err());
 
     let space: [usize; 100] = [0; 100];
-    HEAP_BASE.store(space.as_ptr() as usize, Ordering::Relaxed);
+    HEAP_BASE.store(space.as_ptr() as usize, Ordering::SeqCst);
     unsafe {
         heap.add_to_heap(space.as_ptr() as usize, space.as_ptr().add(100) as usize);
     }
@@ -106,7 +106,7 @@ fn test_heap_merge_final_order() {
     let middle = unsafe { backing_allocation.add(backing_size / 2) } as usize;
     let end = unsafe { backing_allocation.add(backing_size) } as usize;
 
-    HEAP_BASE.store(start, Ordering::Relaxed);
+    HEAP_BASE.store(start, Ordering::SeqCst);
     // add two contiguous ranges of memory
     unsafe { heap.add_to_heap(start, middle) };
     unsafe { heap.add_to_heap(middle, end) };

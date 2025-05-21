@@ -82,7 +82,7 @@ impl<const ORDER: usize> LockFreeHeap<ORDER> {
             current_start += size;
         }
 
-        self.total.fetch_add(total, Ordering::Relaxed); // 写
+        self.total.fetch_add(total, Ordering::SeqCst); // 写
     }
 
     /// Add a range of memory [start, start+size) to the heap
@@ -121,8 +121,8 @@ impl<const ORDER: usize> LockFreeHeap<ORDER> {
                 }
                 // 执行到这里时，说明已经分配成功了
                 let result = NonNull::new(current_block.unwrap() as *mut u8).unwrap();
-                self.user.fetch_add(layout.size(), Ordering::Relaxed); // 写user
-                self.allocated.fetch_add(size, Ordering::Relaxed); // 写allocater
+                self.user.fetch_add(layout.size(), Ordering::SeqCst); // 写user
+                self.allocated.fetch_add(size, Ordering::SeqCst); // 写allocater
                 return Ok(result);
             }
         }
@@ -163,23 +163,23 @@ impl<const ORDER: usize> LockFreeHeap<ORDER> {
             }
         }
 
-        self.user.fetch_sub(layout.size(), Ordering::Relaxed); // 写user
-        self.allocated.fetch_sub(size, Ordering::Relaxed); // 写allocater
+        self.user.fetch_sub(layout.size(), Ordering::SeqCst); // 写user
+        self.allocated.fetch_sub(size, Ordering::SeqCst); // 写allocater
     }
 
     /// Return the number of bytes that user requests
     pub fn stats_alloc_user(&self) -> usize {
-        self.user.load(Ordering::Relaxed)
+        self.user.load(Ordering::SeqCst)
     }
 
     /// Return the number of bytes that are actually allocated
     pub fn stats_alloc_actual(&self) -> usize {
-        self.allocated.load(Ordering::Relaxed)
+        self.allocated.load(Ordering::SeqCst)
     }
 
     /// Return the total number of bytes in the heap
     pub fn stats_total_bytes(&self) -> usize {
-        self.total.load(Ordering::Relaxed)
+        self.total.load(Ordering::SeqCst)
     }
 }
 

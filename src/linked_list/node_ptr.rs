@@ -2,6 +2,8 @@ use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 use pi_pointer::{AtomicWrappedPtr, PIPtr, WrappedPtr, NULL_PTR};
 
+use crate::linked_list::{NODE_LBOUND, NODE_UBOUND};
+
 // 此处，使用了指针的最低位作为标记。
 // 为了保证这样带标记的指针能够进行正常的位置无关地址转换，
 // 从get_data_base获取的基地址需要至少按2字节对齐。
@@ -100,7 +102,21 @@ impl ListNode {
             // 若未改变，则说明ptr指向的节点不会在增加引用计数前被释放，因此可以返回ptr
             // 否则，需要重新获取ptr
             if ptr.unmark() == new_ptr.unmark() {
-                assert!(ptr.is_null() || unsafe { *(ptr.ptr() as *mut usize) } != 3);
+                if !ptr.is_null() {
+                    assert!(
+                        (ptr.unmark() as usize) >= (NODE_LBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                    assert!(
+                        (ptr.unmark() as usize) < (NODE_UBOUND.load(Ordering::SeqCst) as usize)
+                    );
+                }
+                assert!(
+                    ptr.is_null()
+                        || unsafe { *(ptr.ptr() as *mut usize) } == NULL_PTR
+                        || unsafe { *(ptr.ptr() as *mut usize) } == (NULL_PTR | DELETE_MARK)
+                        || unsafe { *((*(ptr.ptr() as *mut usize) & !DELETE_MARK) as *mut usize) }
+                            != 3
+                );
                 return ptr;
             }
             ptr = new_ptr
@@ -108,17 +124,17 @@ impl ListNode {
     }
 
     pub(crate) fn rc_increase(&self) {
-        self.rc.fetch_add(1, Ordering::AcqRel);
+        self.rc.fetch_add(1, Ordering::SeqCst);
     }
 
     pub(crate) fn rc_decrease(&self) {
-        self.rc.fetch_sub(1, Ordering::AcqRel);
+        self.rc.fetch_sub(1, Ordering::SeqCst);
         // 溢出检测
-        assert!(self.rc.load(Ordering::Acquire) & (usize::MAX - (usize::MAX >> 1)) == 0);
+        assert!(self.rc.load(Ordering::SeqCst) & (usize::MAX - (usize::MAX >> 1)) == 0);
     }
 
     pub(crate) fn rc(&self) -> usize {
-        self.rc.load(Ordering::Acquire)
+        self.rc.load(Ordering::SeqCst)
     }
 }
 

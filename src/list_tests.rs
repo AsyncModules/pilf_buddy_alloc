@@ -1,6 +1,8 @@
 use pi_pointer::NULL_PTR;
 
 use crate::linked_list;
+use crate::linked_list::NODE_LBOUND;
+use crate::linked_list::NODE_UBOUND;
 use crate::LinkedList;
 use core::mem::size_of;
 use core::ptr::null_mut;
@@ -373,8 +375,7 @@ fn test_linked_list_concurrent() {
     const NUM_DATA_PER_THREAD: usize = 500;
     assert!(NUM_PRODUCERS == NUM_DELETE_CONSUMERS + NUM_POP_CONSUMERS);
 
-    let mut temp: [usize; 2] = [0; 2];
-    temp[0] = 3;
+    let temp: Arc<[usize; 2]> = Arc::new([3, 0]);
 
     for current_num in 0..TEST_NUM {
         let mut handles =
@@ -385,6 +386,10 @@ fn test_linked_list_concurrent() {
         let pop_nums: Arc<[AtomicUsize; NUM_PRODUCERS * NUM_DATA_PER_THREAD]> =
             Arc::new([const { AtomicUsize::new(0) }; NUM_PRODUCERS * NUM_DATA_PER_THREAD]);
         let list = Arc::new(linked_list::LinkedList::new());
+
+        let node_addr_range = values.as_ptr_range();
+        NODE_LBOUND.store(node_addr_range.start as *mut (), Ordering::SeqCst);
+        NODE_UBOUND.store(node_addr_range.end as *mut (), Ordering::SeqCst);
 
         for i in 0..NUM_PRODUCERS {
             let l = list.clone();
@@ -410,6 +415,7 @@ fn test_linked_list_concurrent() {
             let l = list.clone();
             let v = values.clone();
             let p = pop_nums.clone();
+            let t = temp.clone();
             handles.push(thread::spawn(move || {
                 let mut value_ptr: [*mut (); NUM_DATA_PER_THREAD] =
                     [null_mut(); NUM_DATA_PER_THREAD];
@@ -427,9 +433,9 @@ fn test_linked_list_concurrent() {
                             // assert!(*((value_ptr[j] as *mut usize).add(1)) == 0);
                             // *(value_ptr[j] as *mut usize) = usize::MAX;
                             *(value_ptr[j] as *mut usize) =
-                                &temp as *const usize as *const () as usize;
+                                t.as_ptr() as *const usize as *const () as usize;
                         }
-                        p[i * NUM_DATA_PER_THREAD + j].fetch_add(1, Ordering::AcqRel);
+                        p[i * NUM_DATA_PER_THREAD + j].fetch_add(1, Ordering::SeqCst);
                         j += 1; // 只有删除成功才会增加删除计数
                     } else {
                         if let Some(ptr) = l.pop() {
@@ -437,12 +443,13 @@ fn test_linked_list_concurrent() {
                             unsafe {
                                 // assert!(*((ptr as *mut usize).add(1)) == 0);
                                 // *(ptr as *mut usize) = usize::MAX;
-                                *(ptr as *mut usize) = &temp as *const usize as *const () as usize;
+                                *(ptr as *mut usize) =
+                                    t.as_ptr() as *const usize as *const () as usize;
                             }
                             let offset = (ptr as usize - v.as_ptr() as *const () as usize)
                                 / size_of::<usize>()
                                 / 2;
-                            p[offset].fetch_add(1, Ordering::AcqRel);
+                            p[offset].fetch_add(1, Ordering::SeqCst);
                             j += 1; // 只有删除成功才会增加删除计数
                         }
                     }
@@ -454,6 +461,7 @@ fn test_linked_list_concurrent() {
             let l = list.clone();
             let v = values.clone();
             let p = pop_nums.clone();
+            let t = temp.clone();
             handles.push(thread::spawn(move || {
                 let mut j = 0; // 删除计数
                 let pop_num = if i <= 0 {
@@ -466,12 +474,12 @@ fn test_linked_list_concurrent() {
                         unsafe {
                             // assert!(*((ptr as *mut usize).add(1)) == 0);
                             // *(ptr as *mut usize) = usize::MAX;
-                            *(ptr as *mut usize) = &temp as *const usize as *const () as usize;
+                            *(ptr as *mut usize) = t.as_ptr() as *const usize as *const () as usize;
                         }
                         let offset = (ptr as usize - v.as_ptr() as *const () as usize)
                             / size_of::<usize>()
                             / 2;
-                        p[offset].fetch_add(1, Ordering::AcqRel);
+                        p[offset].fetch_add(1, Ordering::SeqCst);
                         j += 1; // 只有删除成功才会增加删除计数
                     }
                 }
@@ -484,7 +492,7 @@ fn test_linked_list_concurrent() {
 
         assert!(list.is_empty()); // 验证列表为空
         for i in 0..NUM_PRODUCERS * NUM_DATA_PER_THREAD {
-            assert!(pop_nums[i].load(Ordering::Acquire) == 1); // 验证所有元素恰好被取出一次。
+            assert!(pop_nums[i].load(Ordering::SeqCst) == 1); // 验证所有元素恰好被取出一次。
         }
 
         // 用于多次运行，打印出当前已完成的次数
