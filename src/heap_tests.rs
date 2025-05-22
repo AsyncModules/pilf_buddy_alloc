@@ -5,10 +5,7 @@ use core::{
 };
 use ctor::ctor;
 use pi_pointer::GetDataBase;
-use std::{
-    sync::Arc,
-    thread::{spawn, JoinHandle},
-};
+use std::thread::{spawn, JoinHandle};
 
 /// 这个实现是用来进行单元测试的，list_test 也是用这个函数
 struct GetDataBaseImpl;
@@ -147,7 +144,7 @@ static HEAP_ALLOCATOR: LockFreeHeap<ORDER> = LockFreeHeap::<ORDER>::new();
 ///
 /// So the solution in this dilemma is to run `fn init_heap()` in initialization phase
 /// rather than in `fn main()`. We need `ctor` to do this.
-// #[ctor]
+#[ctor]
 fn init_heap() {
     let heap_start = &raw mut HEAP as *mut _ as usize;
     unsafe {
